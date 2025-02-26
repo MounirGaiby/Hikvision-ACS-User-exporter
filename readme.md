@@ -11,7 +11,7 @@ This Python script retrieves user information, face images, and card details fro
 
 1.  **Run the script:**
     ```bash
-    python your_script_name.py
+    python main.py
     ```
 2.  **Enter the required information:**
     -   Base URL of the Hikvision device (e.g., `https://192.168.1.100`)
@@ -48,12 +48,3 @@ This Python script retrieves user information, face images, and card details fro
         -   Appends the user data to a list.
     -   Saves the user data to `user_data.json`.
     -   Prints a message indicating where the data and images were saved.
-
-## Important Notes
-
--   **Disable SSL Verification:** The script disables SSL certificate verification using `urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)` and `verify=False` in requests. This is done because Hikvision devices often use self-signed certificates. **It is strongly recommended to enable SSL verification in a production environment if possible.**
--   **Authentication:** The script uses HTTP Digest Authentication. Ensure the provided username and password have the necessary privileges to access the ISAPI endpoints.
--   **Error Handling:** The script includes basic error handling for network requests and JSON parsing.
--   **API Compatibility:** This script is designed for Hikvision devices with the described ISAPI endpoints. API compatibility may vary between different Hikvision device models and firmware versions.
--   **Rate Limiting:** If you encounter issues due to rate limiting, consider adding delays between requests.
--   **Security:** Handle the device password with care. Avoid storing it directly in the script. Consider using environment variables or other secure methods.
