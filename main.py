@@ -226,8 +226,8 @@ def main():
     logging.info(f"Total users to process: {total_users}.")
     user_data = []
     successful_images = 0
-    failed_image_downloads = 0  # New counter for actual download failures
-    users_without_images = 0   # New counter for users with no image
+    failed_image_downloads = 0
+    users_without_images = 0
 
     # Process each user and log the processing steps
     for i, user in enumerate(users, 1):
@@ -281,13 +281,27 @@ def main():
         user_data.append(filtered_user)
         logging.debug(f"User {employee_no} processed and added to output list.")
 
-    # Save user data to JSON file in the output directory
+    # Create summary dictionary
+    summary = {
+        "total_users": total_users,
+        "successful_images": successful_images,
+        "failed_image_downloads": failed_image_downloads,
+        "users_without_images": users_without_images
+    }
+
+    # Create final JSON structure with summary and users
+    final_data = {
+        "summary": summary,
+        "users": user_data
+    }
+
+    # Save final data to JSON file in the output directory
     try:
         with open(os.path.join(output_dir, "user_data.json"), 'w') as f:
-            json.dump(user_data, f, indent=4)
-        logging.info("User data saved to JSON file successfully.")
+            json.dump(final_data, f, indent=4)
+        logging.info("User data and summary saved to JSON file successfully.")
     except Exception as e:
-        logging.error(f"Error saving user data to JSON: {e}")
+        logging.error(f"Error saving user data and summary to JSON: {e}")
         return
 
     # Save configuration for next run
