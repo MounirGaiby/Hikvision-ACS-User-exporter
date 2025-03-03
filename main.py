@@ -5,6 +5,7 @@ import os
 import urllib3
 import datetime
 import logging
+import time
 
 # Disable SSL warnings for simplicity (not recommended for production)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -20,46 +21,66 @@ logging.basicConfig(
 def get_all_users(base_url, username, password):
     """Retrieve all normal users from the device."""
     users = []
+    max_results = 50  # Maximum users per request; adjust if API docs specify a different limit
+    search_id = f"search_{int(time.time() * 1000)}"  # Unique search ID, similar to JS Date.now()
     search_position = 0
-    max_results = 50
+    url = f"{base_url}/ISAPI/AccessControl/UserInfo/Search?format=json"
+    headers = {'Content-Type': 'application/json'}
+
     logging.info("Starting to fetch users from device.")
 
-    while True:
-        logging.debug(f"Fetching users starting at position {search_position} with up to {max_results} results.")
-        url = f"{base_url}/ISAPI/AccessControl/UserInfo/Search?format=json"
-        payload = {
-            "UserInfoSearchCond": {
-                "searchID": "usersx",
-                "searchResultPosition": search_position,
-                "maxResults": max_results,
-                "userType": "normal"
-            }
+    # Initial request to get total_matches and first batch
+    payload = {
+        "UserInfoSearchCond": {
+            "searchID": search_id,
+            "searchResultPosition": search_position,
+            "maxResults": max_results,
+            "userType": "normal"
         }
-        headers = {'Content-Type': 'application/json'}
+    }
 
-        try:
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload),
+                                 auth=HTTPDigestAuth(username, password), verify=False)
+        logging.debug(f"Initial response status code: {response.status_code}")
+        response.raise_for_status()
+        data = response.json()
+
+        if "UserInfoSearch" not in data:
+            logging.warning("Initial response lacks UserInfoSearch; no users retrieved.")
+            return users
+
+        total_matches = int(data["UserInfoSearch"].get("totalMatches", 0))
+        user_info = data["UserInfoSearch"].get("UserInfo", [])
+        users.extend(user_info)
+        logging.info(f"Initial batch: Retrieved {len(user_info)} users, total matches: {total_matches}")
+
+        # Fetch additional batches until all users are retrieved
+        while len(users) < total_matches:
+            search_position = len(users)  # Update position based on users collected
+            payload["UserInfoSearchCond"]["searchResultPosition"] = search_position
+
             response = requests.post(url, headers=headers, data=json.dumps(payload),
                                      auth=HTTPDigestAuth(username, password), verify=False)
-            logging.debug(f"Received response with status code {response.status_code}.")
+            logging.debug(f"Batch response status code: {response.status_code}")
             response.raise_for_status()
             data = response.json()
 
             if "UserInfoSearch" in data and "UserInfo" in data["UserInfoSearch"]:
                 user_info = data["UserInfoSearch"]["UserInfo"]
-                logging.info(f"Retrieved {len(user_info)} users in current batch.")
-                users.extend(user_info)
-                search_position += max_results
-                # If fewer users than max_results are returned, it is the last batch.
-                if len(user_info) < max_results:
+                if not user_info:
+                    logging.info("No more users returned; stopping.")
                     break
+                users.extend(user_info)
+                logging.info(f"Retrieved {len(user_info)} more users, total now: {len(users)}")
             else:
-                logging.warning("Unexpected response structure; stopping user retrieval.")
+                logging.warning("Unexpected response structure; stopping.")
                 break
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Error retrieving users: {e}")
-            break
 
-    logging.info(f"Total users fetched: {len(users)}.")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error retrieving users: {e}")
+
+    logging.info(f"Total users fetched: {len(users)}")
     return users
 
 def get_user_face_url(base_url, username, password, employee_no):
@@ -205,6 +226,8 @@ def main():
     logging.info(f"Total users to process: {total_users}.")
     user_data = []
     successful_images = 0
+    failed_image_downloads = 0  # New counter for actual download failures
+    users_without_images = 0   # New counter for users with no image
 
     # Process each user and log the processing steps
     for i, user in enumerate(users, 1):
@@ -223,10 +246,12 @@ def main():
                 logging.info(f"Image for user {employee_no} downloaded successfully.")
             else:
                 user["local_image_path"] = None
+                failed_image_downloads += 1
                 logging.warning(f"Failed to download image for user {employee_no}.")
         else:
             user["local_image_path"] = None
-            logging.warning(f"No face URL available for user {employee_no}; skipping image download.")
+            users_without_images += 1
+            logging.info(f"No face image available for user {employee_no}; skipping download.")
 
         # Get card information for the user
         user_cards = get_user_cards(base_url, username, password, employee_no)
@@ -283,7 +308,8 @@ def main():
     print("\nProcessing complete!")
     print(f"Total users processed: {total_users}")
     print(f"Images successfully downloaded: {successful_images}")
-    print(f"Images failed to download: {total_users - successful_images}")
+    print(f"Images failed to download: {failed_image_downloads}")
+    print(f"Users without images: {users_without_images}")
     print(f"User data and images saved to '{output_dir}' directory.")
 
 if __name__ == "__main__":
